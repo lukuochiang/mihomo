@@ -99,7 +99,8 @@ func (p *ProxyServer) Close() error {
 }
 
 func (p *ProxyServer) startHTTP() error {
-	addr := fmt.Sprintf("%s:%d", p.config.HTTPBind, p.config.HTTPPort)
+	bind := NormalizeBindAddress(p.config.HTTPBind)
+	addr := fmt.Sprintf("%s:%d", bind, p.config.HTTPPort)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -334,7 +335,8 @@ func (s *socks5Server) Close() error {
 }
 
 func (p *ProxyServer) startSOCKS5() error {
-	addr := fmt.Sprintf("%s:%d", p.config.SOCKSBind, p.config.SOCKSPort)
+	bind := NormalizeBindAddress(p.config.SOCKSBind)
+	addr := fmt.Sprintf("%s:%d", bind, p.config.SOCKSPort)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err

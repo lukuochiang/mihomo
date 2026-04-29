@@ -17,6 +17,15 @@ import (
 	"github.com/lukuochiang/mihomo/core/policy/smart"
 )
 
+// NormalizeBindAddress converts "*" to "" (listen on all interfaces)
+// which is the correct way to listen on all interfaces in Go's net package
+func NormalizeBindAddress(bind string) string {
+	if bind == "*" {
+		return ""
+	}
+	return bind
+}
+
 // HTTPSConfig holds HTTPS proxy server configuration
 type HTTPSConfig struct {
 	Enabled  bool
@@ -78,7 +87,8 @@ func (s *HTTPSServer) Start() error {
 		return nil
 	}
 
-	addr := fmt.Sprintf("%s:%d", s.config.Bind, s.config.Port)
+	bind := NormalizeBindAddress(s.config.Bind)
+	addr := fmt.Sprintf("%s:%d", bind, s.config.Port)
 
 	// Load TLS certificate
 	cert, err := tls.LoadX509KeyPair(s.config.CertFile, s.config.KeyFile)
@@ -324,7 +334,8 @@ func (s *TunnelServer) Start() error {
 		return nil
 	}
 
-	addr := fmt.Sprintf("%s:%d", s.config.Bind, s.config.Port)
+	bind := NormalizeBindAddress(s.config.Bind)
+	addr := fmt.Sprintf("%s:%d", bind, s.config.Port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
@@ -445,7 +456,8 @@ func (s *RedirectServer) Start() error {
 		return nil
 	}
 
-	addr := fmt.Sprintf("%s:%d", s.config.Bind, s.config.Port)
+	bind := NormalizeBindAddress(s.config.Bind)
+	addr := fmt.Sprintf("%s:%d", bind, s.config.Port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
@@ -604,7 +616,8 @@ func NewTProxyServer(cfg *TProxyConfig, dialer *outbound.Dialer, sm *smart.Smart
 // Start starts the TProxy server
 func (s *TProxyServer) Start() error {
 	if s.config.EnabledIPv4 {
-		addr := fmt.Sprintf("%s:%d", s.config.Bind, s.config.Port)
+		bind := NormalizeBindAddress(s.config.Bind)
+		addr := fmt.Sprintf("%s:%d", bind, s.config.Port)
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			return fmt.Errorf("failed to listen on %s: %w", addr, err)
