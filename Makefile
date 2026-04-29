@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run install
+.PHONY: all build clean test lint run install set-version
 
 # Variables
 BINARY_NAME=mihomo
@@ -7,14 +7,11 @@ BINARY_NAME=mihomo
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
-# Version info from VERSION file (format: VERSION:BRANCH, e.g., alpha:smart or v0.1.0-alpha:smart)
-VERSION_FILE=/bin/cat VERSION 2>/dev/null || echo "alpha:smart"
-VERSION=$(firstword $(subst :, ,$(shell $(VERSION_FILE))))
-BRANCH=$(lastword $(subst :, ,$(shell $(VERSION_FILE))))
-
-# Fallback defaults
-VERSION?=$(shell echo $(VERSION) | grep -v '^$$' | head -1 || echo "alpha")
-BRANCH?=$(shell echo $(BRANCH) | grep -v '^$$' | head -1 || echo "smart")
+# Version info from VERSION file (format: VERSION:BRANCH)
+# Can be overridden: make set-version VERSION=v1.0.0
+-include .version.local
+VERSION ?= alpha
+BRANCH ?= smart
 
 # ldflags for version info
 GO_LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.branch=$(BRANCH) -X main.commit=$(COMMIT) -X main.date=$(BUILD_TIME)"
@@ -32,6 +29,13 @@ CMD_DIR=.
 
 # Build targets
 all: clean test build
+
+# Set version (usage: make set-version VERSION=v0.1.0-alpha)
+set-version:
+	@echo "Setting version to $(VERSION):$(BRANCH)"
+	@echo 'VERSION=$(VERSION)' > .version.local
+	@echo 'BRANCH=$(BRANCH)' >> .version.local
+	@echo "Done! Run 'make build' to rebuild."
 
 build:
 	@echo "Building ${BINARY_NAME}..."

@@ -1,4 +1,6 @@
 # mihomo smart Version Configuration
+# Edit this file to set the version, or use: make set-version VERSION=x.y.z
+
 # Format: VERSION:BRANCH
 # Examples:
 #   alpha:smart     - Alpha release for smart branch
