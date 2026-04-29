@@ -3,33 +3,175 @@ package dns
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
-	"net"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
 
-// QUICConfig holds QUIC DNS configuration
-type QUICConfig struct {
-	Enabled    bool
-	Listen     string
-	ServerAddr string
+// DoQ constants per RFC 9250
+const (
+	DoQALPN          = "doq"
+	DoQDefaultPort   = 853
+	DoQMaxPacketSize = 65535
+	DoQBufSize       = 4096
+)
+
+// DoQClient represents a DNS over QUIC client
+type DoQClient struct {
+	Server     string
+	QUICConfig *quic.Config
 	TLSConfig  *tls.Config
+	conn       quic.Connection
+	cache      *Cache
+	mu         sync.Mutex
+}
+
+// NewDoQClient creates a new DoQ client
+func NewDoQClient(server string) *DoQClient {
+	return &DoQClient{
+		Server: server,
+		QUICConfig: &quic.Config{
+			KeepAlivePeriod: 30 * time.Second,
+			MaxIdleTimeout:  60 * time.Second,
+		},
+		TLSConfig: &tls.Config{
+			NextProtos: []string{DoQALPN},
+		},
+		cache: NewCache(),
+	}
+}
+
+// Exchange performs a DoQ query
+func (c *DoQClient) Exchange(ctx context.Context, domain string, qtype uint16) (*dns.Msg, error) {
+	req := new(dns.Msg)
+	req.SetQuestion(dns.Fqdn(domain), qtype)
+
+	// Check cache first
+	key := fmt.Sprintf("%s:%d", domain, qtype)
+	if entry, ok := c.cache.Get(key, qtype); ok {
+		resp := new(dns.Msg)
+		resp.SetReply(req)
+		resp.Answer = entry.Answer
+		return resp, nil
+	}
+
+	// Create QUIC connection
+	if err := c.connect(ctx); err != nil {
+		return nil, err
+	}
+
+	// Send DNS query
+	resp, err := c.exchange(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache response
+	if len(resp.Answer) > 0 {
+		c.cache.Set(domain, qtype, resp.Answer, getTTL(resp.Answer))
+	}
+
+	return resp, nil
+}
+
+func (c *DoQClient) connect(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn != nil {
+		return nil
+	}
+
+	// Parse server address
+	addr := c.Server
+	if !strings.Contains(addr, ":") {
+		addr = fmt.Sprintf("%s:%d", addr, DoQDefaultPort)
+	}
+
+	// Create QUIC connection
+	conn, err := quic.DialAddr(ctx, addr, c.TLSConfig, c.QUICConfig)
+	if err != nil {
+		return fmt.Errorf("failed to dial QUIC: %w", err)
+	}
+
+	c.conn = conn
+	return nil
+}
+
+func (c *DoQClient) exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, error) {
+	// Pack DNS message
+	data, err := req.Pack()
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack DNS message: %w", err)
+	}
+
+	// Open stream and send
+	stream, err := c.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open stream: %w", err)
+	}
+	defer stream.Close()
+
+	// Write DNS message length as varint (DoQ uses stream)
+	var buf [binary.MaxVarintLen64]byte
+	n := binary.PutUvarint(buf[:], uint64(len(data)))
+	if _, err := stream.Write(buf[:n]); err != nil {
+		return nil, fmt.Errorf("failed to write length: %w", err)
+	}
+
+	if _, err := stream.Write(data); err != nil {
+		return nil, fmt.Errorf("failed to write data: %w", err)
+	}
+
+	// Read response length
+	respLenBuf := make([]byte, binary.MaxVarintLen64)
+	n, err = stream.Read(respLenBuf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read length: %w", err)
+	}
+	respLen, _ := binary.Uvarint(respLenBuf[:n])
+
+	// Read response data
+	respData := make([]byte, respLen)
+	if _, err := stream.Read(respData); err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Unpack DNS message
+	resp := new(dns.Msg)
+	if err := resp.Unpack(respData); err != nil {
+		return nil, fmt.Errorf("failed to unpack response: %w", err)
+	}
+
+	return resp, nil
+}
+
+// Close closes the DoQ client
+func (c *DoQClient) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn != nil {
+		return c.conn.CloseWithError(0, "")
+	}
+	return nil
 }
 
 // DoQServer represents a DNS over QUIC server
 type DoQServer struct {
-	config   ServerConfig
-	handler  Handler
-	listener *net.UDPConn
-	cache    *Cache
-	mu       sync.RWMutex
-	running  bool
-	group    *errgroup.Group
+	config  ServerConfig
+	handler Handler
+	server  *quic.Listener
+	cache   *Cache
+	mu      sync.RWMutex
+	running bool
+	group   *errgroup.Group
 }
 
 // NewDoQServer creates a new DoQ server
@@ -63,30 +205,29 @@ func (s *DoQServer) Start() error {
 	s.group = &errgroup.Group{}
 	s.mu.Unlock()
 
-	// Listen on UDP port for QUIC (DoQ uses UDP transport)
+	// Parse listen address
 	addr := s.config.Listen
 	if !strings.Contains(addr, ":") {
-		addr = addr + ":853"
+		addr = fmt.Sprintf("%s:%d", addr, DoQDefaultPort)
 	}
 
-	ln, err := net.ListenUDP("udp", &net.UDPAddr{
-		IP:   net.ParseIP(strings.Split(addr, ":")[0]),
-		Port: 853,
+	// Create TLS config
+	tlsConfig := &tls.Config{
+		NextProtos: []string{DoQALPN},
+	}
+
+	// Create QUIC listener
+	ln, err := quic.ListenAddr(addr, tlsConfig, &quic.Config{
+		KeepAlivePeriod: 30 * time.Second,
+		MaxIdleTimeout:  60 * time.Second,
 	})
 	if err != nil {
-		// Try binding to any address
-		ln, err = net.ListenUDP("udp", &net.UDPAddr{
-			IP:   net.IPv4zero,
-			Port: 853,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to listen on DoQ port: %w", err)
-		}
+		return fmt.Errorf("failed to create QUIC listener: %w", err)
 	}
-	s.listener = ln
+	s.server = ln
 
-	// Start UDP handler for DoQ
-	s.group.Go(s.serveUDP)
+	// Start accepting connections
+	s.group.Go(s.acceptLoop)
 
 	return nil
 }
@@ -105,15 +246,13 @@ func (s *DoQServer) Stop() error {
 		s.group.Wait()
 	}
 
-	if s.listener != nil {
-		return s.listener.Close()
+	if s.server != nil {
+		return s.server.Close()
 	}
 	return nil
 }
 
-func (s *DoQServer) serveUDP() error {
-	buf := make([]byte, 4096)
-
+func (s *DoQServer) acceptLoop() error {
 	for {
 		s.mu.RLock()
 		if !s.running {
@@ -122,28 +261,51 @@ func (s *DoQServer) serveUDP() error {
 		}
 		s.mu.RUnlock()
 
-		s.listener.SetReadDeadline(time.Now().Add(1 * time.Second))
-
-		n, addr, err := s.listener.ReadFromUDP(buf)
+		// Accept QUIC connection
+		conn, err := s.server.Accept(context.Background())
 		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				continue
-			}
-			return err
+			continue
 		}
 
-		go s.handleQUICRequest(addr, buf[:n])
+		// Handle connection in goroutine
+		go s.handleConnection(conn)
 	}
 }
 
-func (s *DoQServer) handleQUICRequest(addr *net.UDPAddr, data []byte) {
+func (s *DoQServer) handleConnection(conn quic.Connection) {
+	defer conn.CloseWithError(0, "")
+
+	for {
+		stream, err := conn.AcceptStream(context.Background())
+		if err != nil {
+			return
+		}
+
+		go s.handleStream(stream)
+	}
+}
+
+func (s *DoQServer) handleStream(stream quic.Stream) {
+	defer stream.Close()
+
+	// Read message length
+	var lenBuf [binary.MaxVarintLen64]byte
+	n, err := stream.Read(lenBuf[:])
+	if err != nil {
+		return
+	}
+	msgLen, _ := binary.Uvarint(lenBuf[:n])
+
+	// Read DNS message
+	data := make([]byte, msgLen)
+	if _, err := stream.Read(data); err != nil {
+		return
+	}
+
 	// Parse DNS query
 	req := new(dns.Msg)
 	if err := req.Unpack(data); err != nil {
-		// Try parsing as DNS wire format
-		if err := req.Unpack(data); err != nil {
-			return
-		}
+		return
 	}
 
 	// Handle DNS request
@@ -159,8 +321,15 @@ func (s *DoQServer) handleQUICRequest(addr *net.UDPAddr, data []byte) {
 		return
 	}
 
-	// Send response back
-	s.listener.WriteToUDP(respData, addr)
+	// Write response length
+	var respLenBuf [binary.MaxVarintLen64]byte
+	n = binary.PutUvarint(respLenBuf[:], uint64(len(respData)))
+	if _, err := stream.Write(respLenBuf[:n]); err != nil {
+		return
+	}
+
+	// Write response data
+	stream.Write(respData)
 }
 
 // Query performs a DoQ query to upstream
@@ -172,21 +341,10 @@ func (s *DoQServer) Query(ctx context.Context, domain string, qtype uint16) (*dn
 }
 
 func (s *DoQServer) doQUPstream(ctx context.Context, req *dns.Msg) (*dns.Msg, error) {
-	// For DoQ, we need a proper QUIC implementation
-	// This is a simplified version that uses UDP
-	client := &dns.Client{
-		Net:     "udp",
-		Timeout: 5 * time.Second,
-	}
-
 	// Try each upstream server
 	for _, server := range s.config.Servers {
-		// DoQ typically uses port 853
-		if !strings.Contains(server, ":") {
-			server = server + ":853"
-		}
-
-		resp, _, err := client.ExchangeContext(ctx, req, server)
+		client := NewDoQClient(server)
+		resp, err := client.Exchange(ctx, req.Question[0].Name, req.Question[0].Qtype)
 		if err == nil {
 			return resp, nil
 		}
@@ -195,66 +353,12 @@ func (s *DoQServer) doQUPstream(ctx context.Context, req *dns.Msg) (*dns.Msg, er
 	return nil, fmt.Errorf("all DoQ servers failed")
 }
 
-// DoQClient represents a DNS over QUIC client
-type DoQClient struct {
-	Server    string
-	TLSConfig *tls.Config
-	cache     *Cache
-}
-
-// NewDoQClient creates a new DoQ client
-func NewDoQClient(server string) *DoQClient {
-	return &DoQClient{
-		Server: server,
-		cache:  NewCache(),
-	}
-}
-
-// Exchange performs a DoQ query
-func (c *DoQClient) Exchange(ctx context.Context, domain string, qtype uint16) (*dns.Msg, error) {
-	req := new(dns.Msg)
-	req.SetQuestion(dns.Fqdn(domain), qtype)
-
-	// Check cache first
-	key := fmt.Sprintf("%s:%d", domain, qtype)
-	if entry, ok := c.cache.Get(key, qtype); ok {
-		resp := new(dns.Msg)
-		resp.SetReply(req)
-		resp.Answer = entry.Answer
-		return resp, nil
-	}
-
-	// Create client
-	client := &dns.Client{
-		Net:     "udp",
-		Timeout: 5 * time.Second,
-	}
-
-	// Try to connect to DoQ server
-	// DoQ typically uses port 853
-	serverAddr := c.Server
-	if !strings.Contains(serverAddr, ":") {
-		serverAddr = serverAddr + ":853"
-	}
-
-	resp, _, err := client.ExchangeContext(ctx, req, serverAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache response
-	if len(resp.Answer) > 0 {
-		c.cache.Set(domain, qtype, resp.Answer, getTTL(resp.Answer))
-	}
-
-	return resp, nil
-}
-
 // DoQUpstream represents a DNS over QUIC upstream
 type DoQUpstream struct {
 	Server    string
 	TLSConfig *tls.Config
 	Cache     *Cache
+	client    *DoQClient
 }
 
 // NewDoQUpstream creates a new DoQ upstream
@@ -282,25 +386,13 @@ func (u *DoQUpstream) Exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, err
 		return resp, nil
 	}
 
-	// Create QUIC client
-	client := &dns.Client{
-		Net:     "udp",
-		Timeout: 5 * time.Second,
+	// Create client if needed
+	if u.client == nil {
+		u.client = NewDoQClient(u.Server)
 	}
 
-	// Add TLS config if provided
-	if u.TLSConfig != nil {
-		// DNS over QUIC uses TLS
-		client.TLSConfig = u.TLSConfig
-	}
-
-	// Try to connect
-	serverAddr := u.Server
-	if !strings.Contains(serverAddr, ":") {
-		serverAddr = serverAddr + ":853"
-	}
-
-	resp, _, err := client.ExchangeContext(ctx, req, serverAddr)
+	// Exchange
+	resp, err := u.client.Exchange(ctx, q.Name, q.Qtype)
 	if err != nil {
 		return nil, err
 	}
@@ -316,18 +408,10 @@ func (u *DoQUpstream) Exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, err
 
 // Close closes the DoQ upstream
 func (u *DoQUpstream) Close() error {
+	if u.client != nil {
+		return u.client.Close()
+	}
 	return nil
-}
-
-// DoHDoQConfig holds combined DNS-over-HTTPS and DNS-over-QUIC config
-type DoHDoQConfig struct {
-	Enabled   bool
-	Listen    string
-	Servers   []string // Upstream DNS servers
-	TLSConfig *tls.Config
-	EnableDoH bool
-	EnableDoQ bool
-	EnableDoT bool
 }
 
 // DNSUpstreamManager manages multiple DNS upstreams

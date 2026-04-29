@@ -13,6 +13,7 @@ import (
 
 	"github.com/mihomo/smart/core/outbound"
 	"github.com/mihomo/smart/core/policy/smart"
+	"github.com/mihomo/smart/core/pool"
 )
 
 // ProxyServer represents a local proxy server
@@ -250,13 +251,13 @@ func (p *ProxyServer) bridge(left, right net.Conn) {
 	done := make(chan struct{}, 2)
 
 	go func() {
-		io.Copy(left, right)
+		pool.PooledCopy(left, right)
 		left.Close()
 		done <- struct{}{}
 	}()
 
 	go func() {
-		io.Copy(right, left)
+		pool.PooledCopy(right, left)
 		right.Close()
 		done <- struct{}{}
 	}()
@@ -545,13 +546,13 @@ func (s *socks5Server) bridge(left, right net.Conn) {
 	done := make(chan struct{}, 2)
 
 	go func() {
-		io.Copy(left, right)
+		pool.PooledCopy(left, right)
 		left.Close()
 		done <- struct{}{}
 	}()
 
 	go func() {
-		io.Copy(right, left)
+		pool.PooledCopy(right, left)
 		right.Close()
 		done <- struct{}{}
 	}()

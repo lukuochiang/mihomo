@@ -2,9 +2,12 @@ package listener
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -152,6 +155,9 @@ func (s *VMessServer) acceptLoop() {
 func (s *VMessServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	// Set read deadline for header
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+
 	// Read first byte - version (must be 1 for VMess)
 	version := make([]byte, 1)
 	if _, err := io.ReadFull(conn, version); err != nil {
@@ -161,12 +167,20 @@ func (s *VMessServer) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Read header
-	// [1 byte version] + [16 bytes IV/method] + [16+ bytes encrypted header]
-	headerBuf := make([]byte, 38) // 1 + 16 + 21 minimum header
+	// Read IV (16 bytes)
+	iv := make([]byte, 16)
+	if _, err := io.ReadFull(conn, iv); err != nil {
+		return
+	}
+
+	// Read encrypted header (at least 38 bytes)
+	headerBuf := make([]byte, 38+16) // header + some extra
 	if _, err := io.ReadFull(conn, headerBuf); err != nil {
 		return
 	}
+
+	// Combine IV and encrypted data for decryption
+	encryptedData := append(iv, headerBuf...)
 
 	// Find matching user by trying all users
 	var authenticated bool
@@ -174,7 +188,7 @@ func (s *VMessServer) handleConnection(conn net.Conn) {
 
 	for _, user := range s.config.Users {
 		// Try to decrypt header with this user's key
-		addr, ok := s.tryDecryptHeader(headerBuf, user.UUID, user.AlterId)
+		addr, ok := s.tryDecryptHeader(encryptedData, user.UUID, user.AlterId)
 		if ok {
 			targetAddr = addr
 			authenticated = true
@@ -186,8 +200,15 @@ func (s *VMessServer) handleConnection(conn net.Conn) {
 		return
 	}
 
+	// Reset deadline for data transfer
+	conn.SetReadDeadline(time.Time{})
+	conn.SetWriteDeadline(time.Time{})
+
 	// Get selected node
 	nodeName := s.getSelectedNode()
+	if nodeName == "" {
+		return
+	}
 
 	// Connect to target
 	targetConn, err := s.dialer.Dial(context.Background(), nodeName, targetAddr)
@@ -201,13 +222,197 @@ func (s *VMessServer) handleConnection(conn net.Conn) {
 }
 
 func (s *VMessServer) tryDecryptHeader(data []byte, uuid string, alterId int) (string, bool) {
-	// VMess header decryption is complex
-	// For simplicity, this is a placeholder that returns false
-	// Real implementation would:
-	// 1. Derive key from UUID
-	// 2. Decrypt the header
-	// 3. Parse the decrypted header for target address
-	return "", false
+	// VMess header decryption
+	// Format: [1 byte version] + [16 bytes IV] + [encrypted header]
+
+	if len(data) < 38 { // 1 + 16 + minimum header
+		return "", false
+	}
+
+	// Parse UUID to 16 bytes
+	uuidBytes, err := parseVMessUUID(uuid)
+	if err != nil {
+		return "", false
+	}
+
+	// Derive key using VMess key derivation (multiple MD5 rounds)
+	key := deriveVMessKeyFromUUID(uuidBytes)
+
+	// Extract IV (next 16 bytes after version)
+	iv := data[1:17]
+	encryptedData := data[17:]
+
+	// Decrypt header using AES-128-CFB
+	decrypted, err := decryptAESCFB(encryptedData, key, iv)
+	if err != nil {
+		return "", false
+	}
+
+	// Parse decrypted header
+	// [1 byte version] + [16 bytes response header] + [4 bytes timestamp] + [1 byte command] + [1 byte address type] + [address] + [2 bytes port]
+
+	if len(decrypted) < 26 {
+		return "", false
+	}
+
+	offset := 1 // skip version
+
+	// Verify response header (skip for now)
+	offset += 16 // response auth
+
+	// Check timestamp (4 bytes, big-endian, Unix time)
+	timestamp := int64(binary.BigEndian.Uint32(decrypted[offset:]))
+	offset += 4
+
+	// Verify timestamp is within acceptable range (60 seconds)
+	if time.Now().Unix()-timestamp > 60 || time.Now().Unix()-timestamp < -60 {
+		return "", false
+	}
+
+	// Command (1 byte)
+	command := decrypted[offset]
+	offset++
+
+	// Address type (1 byte)
+	addrType := decrypted[offset]
+	offset++
+
+	// Parse address
+	var target string
+	switch addrType {
+	case 0x01: // IPv4
+		if len(decrypted) < offset+4+2 {
+			return "", false
+		}
+		ip := fmt.Sprintf("%d.%d.%d.%d", decrypted[offset], decrypted[offset+1], decrypted[offset+2], decrypted[offset+3])
+		port := binary.BigEndian.Uint16(decrypted[offset+4 : offset+6])
+		target = fmt.Sprintf("%s:%d", ip, port)
+
+	case 0x02: // Domain
+		if len(decrypted) < offset+1+2 {
+			return "", false
+		}
+		domainLen := int(decrypted[offset])
+		offset++
+		if len(decrypted) < offset+domainLen+2 {
+			return "", false
+		}
+		domain := string(decrypted[offset : offset+domainLen])
+		port := binary.BigEndian.Uint16(decrypted[offset+domainLen : offset+domainLen+2])
+		target = fmt.Sprintf("%s:%d", domain, port)
+
+	case 0x03: // IPv6
+		if len(decrypted) < offset+16+2 {
+			return "", false
+		}
+		ip6 := fmt.Sprintf("[%x:%x:%x:%x:%x:%x:%x:%x]",
+			binary.BigEndian.Uint16(decrypted[offset:offset+2]),
+			binary.BigEndian.Uint16(decrypted[offset+2:offset+4]),
+			binary.BigEndian.Uint16(decrypted[offset+4:offset+6]),
+			binary.BigEndian.Uint16(decrypted[offset+6:offset+8]),
+			binary.BigEndian.Uint16(decrypted[offset+8:offset+10]),
+			binary.BigEndian.Uint16(decrypted[offset+10:offset+12]),
+			binary.BigEndian.Uint16(decrypted[offset+12:offset+14]),
+			binary.BigEndian.Uint16(decrypted[offset+14:offset+16]),
+		)
+		port := binary.BigEndian.Uint16(decrypted[offset+16 : offset+18])
+		target = fmt.Sprintf("%s:%d", ip6, port)
+
+	default:
+		return "", false
+	}
+
+	// Only support TCP command for now
+	if command != 0x01 {
+		return "", false
+	}
+
+	return target, true
+}
+
+// parseVMessUUID parses UUID string to 16 bytes
+func parseVMessUUID(s string) ([16]byte, error) {
+	var uuid [16]byte
+
+	// Remove dashes and braces
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, "{", "")
+	s = strings.ReplaceAll(s, "}", "")
+
+	if len(s) != 32 {
+		return uuid, fmt.Errorf("invalid UUID length")
+	}
+
+	// Parse hex
+	decoded, err := hex.DecodeString(s)
+	if err != nil {
+		return uuid, err
+	}
+
+	if len(decoded) != 16 {
+		return uuid, fmt.Errorf("invalid UUID decoded length")
+	}
+
+	copy(uuid[:], decoded)
+	return uuid, nil
+}
+
+// deriveVMessKeyFromUUID derives VMess encryption key from UUID bytes
+func deriveVMessKeyFromUUID(uuid [16]byte) []byte {
+	// VMess key derivation: multiple rounds of MD5
+	md5sum := md5.Sum(uuid[:])
+
+	result := make([]byte, 16)
+	copy(result, md5sum[:])
+
+	// 1024 rounds of MD5
+	for i := 0; i < 1024; i++ {
+		h := md5.New()
+		h.Write(result)
+		h.Write(md5sum[:])
+		copy(result, h.Sum(nil))
+	}
+
+	return result
+}
+
+// decryptAESCFB decrypts data using AES-128-CFB
+func decryptAESCFB(ciphertext, key, iv []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key[:16])
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure we have enough data for CFB
+	if len(ciphertext) < 16 {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	plaintext := make([]byte, len(ciphertext))
+	stream := cipher.NewCFBDecrypter(block, iv)
+	stream.XORKeyStream(plaintext, ciphertext)
+
+	return plaintext, nil
+}
+
+// decryptAESGCM decrypts data using AES-128-GCM
+func decryptAESGCM(ciphertext, key, nonce []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key[:16])
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	// GCM nonce size is typically 12 bytes
+	if len(nonce) > gcm.NonceSize() {
+		nonce = nonce[:gcm.NonceSize()]
+	}
+
+	return gcm.Open(nil, nonce, ciphertext, nil)
 }
 
 func (s *VMessServer) getSelectedNode() string {

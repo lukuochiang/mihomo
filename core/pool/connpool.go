@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"sync"
@@ -539,4 +540,140 @@ func DefaultDialer(cfg *Config) DialFunc {
 		KeepAlive: cfg.KeepAlive,
 	}
 	return dialer.DialContext
+}
+
+// ============ Buffer Pool ============
+
+// BufferPool is a pool of byte buffers
+type BufferPool struct {
+	pool sync.Pool
+	size int
+}
+
+// NewBufferPool creates a new buffer pool
+func NewBufferPool(size int) *BufferPool {
+	if size <= 0 {
+		size = 32 * 1024 // Default 32KB
+	}
+	return &BufferPool{
+		size: size,
+		pool: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, size)
+			},
+		},
+	}
+}
+
+// Get retrieves a buffer from the pool
+func (p *BufferPool) Get() []byte {
+	return p.pool.Get().([]byte)[:p.size]
+}
+
+// Put returns a buffer to the pool
+func (p *BufferPool) Put(buf []byte) {
+	if cap(buf) >= p.size {
+		p.pool.Put(buf[:p.size])
+	}
+}
+
+// CopyPool is a specialized pool for io.Copy operations
+type CopyPool struct {
+	pool sync.Pool
+}
+
+type copyBuffers struct {
+	buf  []byte
+	buf2 []byte
+}
+
+// NewCopyPool creates a pool optimized for io.Copy
+func NewCopyPool() *CopyPool {
+	return &CopyPool{
+		pool: sync.Pool{
+			New: func() interface{} {
+				return &copyBuffers{
+					buf:  make([]byte, 32*1024),
+					buf2: make([]byte, 32*1024),
+				}
+			},
+		},
+	}
+}
+
+// Get retrieves copy buffers
+func (p *CopyPool) Get() (dst, src []byte) {
+	cb := p.pool.Get().(*copyBuffers)
+	return cb.buf, cb.buf2
+}
+
+// Put returns copy buffers to the pool
+func (p *CopyPool) Put(dst, src []byte) {
+	cb := &copyBuffers{
+		buf:  dst,
+		buf2: src,
+	}
+	p.pool.Put(cb)
+}
+
+// Copy pools data between readers and writers using pooled buffers
+func (p *CopyPool) Copy(dst io.Writer, src io.Reader) (written int64, err error) {
+	buf1, buf2 := p.Get()
+	defer p.Put(buf1, buf2)
+
+	for {
+		nr, er := src.Read(buf1)
+		if nr > 0 {
+			nw, ew := dst.Write(buf1[:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+		_ = buf2 // Keep buf2 for next iteration
+	}
+	return written, err
+}
+
+// Default copy pool instance
+var defaultCopyPool = NewCopyPool()
+
+// PooledCopy uses the default pool for copying
+func PooledCopy(dst io.Writer, src io.Reader) (written int64, err error) {
+	return defaultCopyPool.Copy(dst, src)
+}
+
+// Global buffer pools for common sizes
+var (
+	// DefaultBufferPool is the default 32KB buffer pool
+	DefaultBufferPool = NewBufferPool(32 * 1024)
+
+	// SmallBufferPool is for 4KB buffers
+	SmallBufferPool = NewBufferPool(4 * 1024)
+
+	// LargeBufferPool is for 64KB buffers
+	LargeBufferPool = NewBufferPool(64 * 1024)
+)
+
+// GetBuffer gets a buffer from the default pool
+func GetBuffer() []byte {
+	return DefaultBufferPool.Get()
+}
+
+// PutBuffer returns a buffer to the default pool
+func PutBuffer(buf []byte) {
+	DefaultBufferPool.Put(buf)
 }
