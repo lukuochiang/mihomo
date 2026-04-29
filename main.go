@@ -36,17 +36,25 @@ var (
 )
 
 // getVersionString returns the formatted version string
-// Format: mihomo-{os}-{arch}-{version}
-// Note: constant.Version already contains the full version (e.g., "v0.1.0-alpha-smart-1b882ab4")
+// Format: Mihomo Meta {version} {os} {arch} with go{go_version} {build_date}
+// Example: Mihomo Meta alpha-smart-166a207 darwin amd64 with go1.26.1 Tue Mar 31 05:06:32 UTC 2026
 func getVersionString() string {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
-	// Use constant.Version if set (contains full version info), otherwise use local version
+
+	// Use constant.Version if set, otherwise use local version
 	ver := version
 	if constant.Version != "dev" && constant.Version != "" {
 		ver = constant.Version
 	}
-	return fmt.Sprintf("mihomo-%s-%s-%s", osName, arch, ver)
+
+	// Build date
+	buildDate := constant.BuildTime
+	if buildDate == "unknown" {
+		buildDate = time.Now().Format("Mon Jan 2 15:04:05 MST 2006")
+	}
+
+	return fmt.Sprintf("Mihomo Meta %s %s %s with %s %s", ver, osName, arch, constant.GetGoVersion(), buildDate)
 }
 
 var (

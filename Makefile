@@ -6,7 +6,7 @@ BINDIR=bin
 
 # Git info
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
-BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
+BUILD_TIME=$(shell LC_ALL=C date -u '+%a %b %d %H:%M:%S UTC %Y')
 BRANCH=smart
 
 # Version info from VERSION.txt (SemVer format)
