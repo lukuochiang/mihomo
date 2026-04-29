@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -24,10 +25,27 @@ import (
 )
 
 var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+	// Build variables (set via ldflags)
+	version  = "dev"      // e.g., "alpha", "beta", "v1.0.0"
+	branch   = "smart"    // e.g., "smart", "main"
+	commit   = "none"     // git commit hash
+	date     = "unknown"  // build date
 )
+
+// getVersionString returns the formatted version string
+// Format: mihomo-{os}-{arch}-{version}-{branch}-{commit}
+func getVersionString() string {
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+	shortCommit := commit
+	if len(shortCommit) > 7 {
+		shortCommit = shortCommit[:7]
+	}
+	if version == "dev" {
+		return fmt.Sprintf("mihomo-%s-%s-dev-%s-%s", osName, arch, branch, shortCommit)
+	}
+	return fmt.Sprintf("mihomo-%s-%s-%s-%s-%s", osName, arch, version, branch, shortCommit)
+}
 
 var (
 	flagConfig        = flag.String("config", "config.yaml", "config file path")
@@ -41,7 +59,7 @@ func main() {
 
 	// Version info
 	if *flagVersion {
-		fmt.Printf("mihomo smart %s (%s %s)\n", version, commit, date)
+		fmt.Println(getVersionString())
 		os.Exit(0)
 	}
 
@@ -53,8 +71,8 @@ func main() {
 	}
 	defer logger.Sync()
 
-	logger.Info("starting mihomo smart",
-		zap.String("version", version),
+	logger.Info("starting mihomo",
+		zap.String("version", getVersionString()),
 		zap.String("commit", commit),
 	)
 

@@ -2,9 +2,22 @@
 
 # Variables
 BINARY_NAME=mihomo
-VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+# Git info
+COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
-GO_LDFLAGS=-ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${BUILD_TIME}"
+
+# Version info from VERSION file (format: VERSION:BRANCH, e.g., alpha:smart or v0.1.0-alpha:smart)
+VERSION_FILE=/bin/cat VERSION 2>/dev/null || echo "alpha:smart"
+VERSION=$(firstword $(subst :, ,$(shell $(VERSION_FILE))))
+BRANCH=$(lastword $(subst :, ,$(shell $(VERSION_FILE))))
+
+# Fallback defaults
+VERSION?=$(shell echo $(VERSION) | grep -v '^$$' | head -1 || echo "alpha")
+BRANCH?=$(shell echo $(BRANCH) | grep -v '^$$' | head -1 || echo "smart")
+
+# ldflags for version info
+GO_LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.branch=$(BRANCH) -X main.commit=$(COMMIT) -X main.date=$(BUILD_TIME)"
 
 # Go commands
 GO=go

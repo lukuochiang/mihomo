@@ -1,1 +1,8 @@
-v0.1.0-alpha
+# mihomo smart Version Configuration
+# Format: VERSION:BRANCH
+# Examples:
+#   alpha:smart     - Alpha release for smart branch
+#   beta:smart       - Beta release for smart branch
+#   v0.1.0-alpha:smart - Semantic version with alpha tag
+
+alpha:smart
