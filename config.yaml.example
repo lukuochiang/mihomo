@@ -1,0 +1,475 @@
+# mihomo Smart Configuration
+# Compatible with Clash and vernesong/mihomo format
+
+# ==================== 基础配置 ====================
+# Clash 兼容的顶层配置字段
+port: 7890                # HTTP 代理端口
+socks-port: 7891          # SOCKS5 代理端口
+mixed-port: 7892          # 混合代理端口 (HTTP + SOCKS5)
+redir-port: 7893          # Linux 重定向代理端口
+tproxy-port: 7894         # Linux TProxy 端口
+
+allow-lan: true           # 允许局域网连接
+bind-address: "*"         # 绑定地址 (*, 127.0.0.1, 0.0.0.0)
+mode: rule               # 代理模式: rule, global, script
+log-level: info          # 日志级别: silent, info, warning, error, debug
+
+# 网络优化选项
+ipv6: false              # 启用 IPv6
+unified-delay: true       # 统一延迟计算
+tcp-concurrent: true     # TCP 并发连接
+find-process-mode: always # 进程匹配模式: always, match, strict, off
+global-client-fingerprint: chrome  # TLS 指纹
+keep-alive-interval: 15   # TCP keepalive 间隔 (秒)
+keep-alive-idle: 600      # TCP keepalive 空闲时间 (秒)
+
+# ==================== 认证配置 ====================
+authentication:           # 代理认证
+  - username: user1
+    password: pass1
+  - username: user2
+    password: pass2
+
+skip-auth-prefixes:       # 跳过认证的 IP 段
+  - 192.168.0.0/16
+  - 10.0.0.0/8
+  - 127.0.0.1/8
+
+# ==================== API 服务器 ====================
+# 支持 external-controller 格式 (Clash 兼容)
+external-controller: 127.0.0.1:9090
+secret: your-secret-here
+
+# CORS 配置 (可选)
+external-controller-cors:
+  allow-origins:
+    - "*"
+  allow-private-network: true
+
+# ==================== Web Dashboard ====================
+# 支持 external-ui 格式 (Clash 兼容)
+external-ui: ui                    # UI 文件夹路径
+external-ui-name: dashboard         # UI 文件夹名称
+external-ui-url: ""                 # 或从 URL 下载: https://github.com/...
+
+# ==================== Profile 配置 ====================
+profile:
+  store-selected: true    # 保存选中的节点
+  store-fake-ip: true     # 保存 fake IP
+  smart-collector-size: 100  # Smart 数据采集大小上限 (MB)
+
+# ==================== 实验性功能 ====================
+experimental:
+  quic-go-disable-gso: true
+
+# ==================== DNS 配置 ====================
+dns:
+  enable: true
+  listen: 127.0.0.1:53
+  ipv6: false
+  enhanced-mode: fake-ip      # fake-ip, redir-host, off
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - +.lan
+    - +.local
+    - +.msftconnecttest.com
+  default-nameserver:         # 默认 DNS 服务器 (不使用 DoH/DoT)
+    - 119.29.29.29
+    - 223.5.5.5
+  nameserver:                # 主 DNS 服务器
+    - https://dns.google/dns-query
+    - https://cloudflare-dns.com/dns-query
+    - tls://1.1.1.1
+  fallback:                  # 回退 DNS 服务器
+    - 8.8.8.8
+    - 1.1.1.1
+  fallback-filter:            # DNS 回退过滤
+    geoip:
+      - CN
+      - JP
+    geoip-code: CN
+  strategy: prefer_ipv4       # prefer_ipv4, prefer_ipv6, only_ipv4, only_ipv6
+  cache-algorithm: arc       # 缓存算法
+  cache-max-size: 512        # 缓存大小
+
+# ==================== Sniffer 配置 ====================
+sniffer:
+  enable: true
+  override-destination: false
+  sniffing:               # 启用的嗅探协议
+    - tls
+    - http
+  sniff:                 # 按协议配置嗅探
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+    QUIC:
+      ports:
+        - 443
+  force-domain:          # 强制嗅探的域名
+    - +.v2ex.com
+  skip-domain:           # 跳过嗅探的域名
+    - Mijia Cloud
+    - +.push.apple.com
+  skip-src-address:      # 跳过嗅探的源地址
+    - 127.0.0.1/8
+  port-whitelist:       # 端口白名单
+    - "80"
+    - "443"
+  force-dns-mapping: true
+  parse-pure-ip: true
+
+# ==================== TUN 配置 ====================
+tun:
+  enable: false
+  stack: mixed             # system, gvisor, mixed
+  dns-hijack:
+    - any:53
+    - tcp://any:53
+  auto-route: true         # 自动设置路由表
+  auto-redirect: true      # 自动重定向流量
+  auto-detect-interface: true
+  mtu: 1500
+  interface-name: tun0
+  routing-mark: 6666
+  inet4-address: 172.19.0.1/30
+  inet6-address: ""
+  strict-route: true       # 严格路由
+  udp-timeout: 300        # UDP 超时 (秒)
+  extra-udp: true
+
+# ==================== Hosts ====================
+hosts:
+  "dns.google": 8.8.8.8
+  "one.one.one.one": 1.1.1.1
+
+# ==================== 代理节点 ====================
+proxies:
+  # VMess 节点
+  - name: vmess-us
+    type: vmess
+    server: us.example.com
+    port: 443
+    uuid: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    cipher: auto
+    alterId: 0
+    udp: true
+
+  # VLESS 节点
+  - name: vless-jp
+    type: vless
+    server: jp.example.com
+    port: 443
+    uuid: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    flow: xtls-rprx-vision
+    udp: true
+
+  # Trojan 节点
+  - name: trojan-sg
+    type: trojan
+    server: sg.example.com
+    port: 443
+    password: your-password
+    sni: sg.example.com
+    skip-cert-verify: false
+    udp: true
+
+  # Shadowsocks 节点
+  - name: ss-us
+    type: ss
+    server: us.example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: your-password
+
+  # ShadowsocksR 节点
+  - name: ssr-cn
+    type: ssr
+    server: cn.example.com
+    port: 8388
+    password: your-password
+    cipher: aes-256-cfb
+    protocol: auth_sha1_v4
+    obfs: tls1.2_ticket_auth
+    obfs-param: your-obfs-param
+    protocol-param: ""
+
+  # SSH 节点
+  - name: ssh-server
+    type: ssh
+    server: ssh.example.com
+    port: 22
+    username: root
+    password: your-password
+    # 或使用私钥:
+    # private-key-path: /path/to/private/key
+    # private-key-pass: key-passphrase
+
+  # Hysteria2 节点
+  - name: hysteria2
+    type: hysteria2
+    server: hy2.example.com
+    port: 443
+    password: your-password
+    auth: ""              # 可选: base64 编码的认证字符串
+    obfs: salamander
+    obfs-password: your-obfs-password
+    protocol-mode: hy2
+
+  # TUIC 节点
+  - name: tuic
+    type: tuic
+    server: tuic.example.com
+    port: 443
+    uuid: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    password: your-password
+    congestion-control: bbr
+    udp-relay-mode: native
+
+  # WireGuard 节点
+  - name: wireguard
+    type: wireguard
+    server: wg.example.com
+    port: 51820
+    private-key: your-private-key
+    peer-public-key: peer-public-key
+    # peer-pre-shared-key: optional-psk
+    local-address:
+      - 10.0.0.2/32
+    mtu: 1420
+    # reserved: [0, 0, 0]
+
+# ==================== 代理提供者 ====================
+proxy-providers:
+  # HTTP 类型提供者
+  http-provider:
+    type: http
+    url: https://example.com/api/proxies
+    interval: 3600           # 更新间隔 (秒)
+    proxy: DIRECT            # 用于获取配置的出站
+    filter: "^((?!群|机场|官网).)*$"  # 节点过滤正则
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+    override:
+      additional-prefix: "[优] "
+      additional-suffix: ""
+      remove-prefix: ""
+      remove-suffix: ""
+      interface-name: ""
+      routing-mark: 0
+
+  # 文件类型提供者
+  file-provider:
+    type: file
+    path: /path/to/proxies.yaml
+
+# ==================== 代理策略组 ====================
+proxy-groups:
+  # 手动选择 (Selector)
+  - name: 节点选择
+    type: select
+    proxies:
+      - vmess-us
+      - vless-jp
+      - trojan-sg
+      - ss-us
+      - 智能选择
+      - DIRECT
+
+  # URLTest 自动测速
+  - name: 自动选择
+    type: url-test
+    proxies:
+      - vmess-us
+      - vless-jp
+      - trojan-sg
+    url: "https://www.gstatic.com/generate_204"
+    interval: 300
+    tolerance: 50
+    lazy: true
+
+  # Fallback 故障转移
+  - name: 故障转移
+    type: fallback
+    proxies:
+      - vless-jp
+      - vmess-us
+      - trojan-sg
+    url: "https://www.gstatic.com/generate_204"
+    interval: 300
+    lazy: true
+
+  # Load Balance 负载均衡
+  - name: 负载均衡
+    type: load-balance
+    proxies:
+      - vmess-us
+      - vless-jp
+      - trojan-sg
+    strategy: round-robin    # round-robin, least-connections, consistent-hash
+    lazy: false
+
+  # Relay 链式代理
+  - name: 链式代理
+    type: relay
+    proxies:
+      - vmess-us
+      - vless-jp
+
+  # Smart 智能选择 (vernesong/mihomo 风格)
+  - name: 智能选择
+    type: smart
+    proxies:
+      - vmess-us
+      - vless-jp
+      - trojan-sg
+      - ss-us
+    smart-mode: auto        # auto, fast, stable, balanced, learning
+    target-region: ""         # 首选地区: us, jp, hk, sg 等
+    # Smart 高级选项 (vernesong)
+    uselightgbm: false      # 使用 LightGBM 模型
+    collectdata: false      # 采集数据
+    policy-priority: ""     # 多订阅优先级: "Premium:0.9;SG:1.3"
+    sample-rate: 1.0        # 采样率 (0-1)
+    prefer-asn: false       # 优先 ASN 查询
+
+  # Smart 带过滤
+  - name: 美国节点
+    type: smart
+    filter: ".*(美国|美|US|USA).*"    # 节点过滤正则
+    include-all: true                  # 包含所有匹配的节点
+    policy-priority: "Premium:2;Standard:1"
+    smart-mode: fast
+
+  # 应用策略组
+  - name: 国外流量
+    type: select
+    proxies:
+      - 智能选择
+      - 自动选择
+      - 节点选择
+
+  - name: 国内流量
+    type: select
+    proxies:
+      - DIRECT
+      - 节点选择
+
+  # 兜底策略
+  - name: 兜底
+    type: select
+    proxies:
+      - 节点选择
+      - DIRECT
+
+# ==================== 规则路由 ====================
+rules:
+  # 域名规则
+  - DOMAIN,services.googleapis.cn,DIRECT
+  - DOMAIN,google.com,国外流量
+  - DOMAIN,googleapis.com,国外流量
+  - DOMAIN,github.com,国外流量
+  - DOMAIN,githubusercontent.com,国外流量
+
+  # 域名后缀规则
+  - DOMAIN-SUFFIX,netflix.com,国外流量
+  - DOMAIN-SUFFIX,nflxvideo.net,国外流量
+  - DOMAIN-SUFFIX,youtube.com,国外流量
+  - DOMAIN-SUFFIX,googlevideo.com,国外流量
+  - DOMAIN-SUFFIX,bilibili.com,国内流量
+  - DOMAIN-SUFFIX,qq.com,国内流量
+  - DOMAIN-SUFFIX,taobao.com,国内流量
+
+  # 域名关键字规则
+  - DOMAIN-KEYWORD,google,国外流量
+  - DOMAIN-KEYWORD,amazon,国外流量
+  - DOMAIN-KEYWORD,netflix,国外流量
+
+  # GeoIP 规则
+  - GEOIP,CN,国内流量
+  - GEOIP,US,国外流量
+  - GEOIP,JP,国外流量
+
+  # IP-CIDR 规则
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+
+  # 规则集 (RULE-SET)
+  - RULE-SET,Private,DIRECT
+  - RULE-SET,Streaming,国外流量
+  - RULE-SET,SocialMedia,国外流量
+  - RULE-SET,Proxy,国外流量
+  - RULE-SET,China,国内流量
+
+  # 进程规则 (需要 find-process-mode)
+  - PROCESS-NAME,WeChat,国内流量
+  - PROCESS-NAME,Tencent,国内流量
+
+  # 协议规则
+  - PROTOCOL,UDP,国外流量
+
+  # 兜底规则
+  - MATCH,兜底
+
+# ==================== 规则提供者 ====================
+rule-providers:
+  # 域名类型规则集
+  Private:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://example.com/rules/private.mrs
+    interval: 86400
+
+  China:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://example.com/rules/china.mrs
+    interval: 86400
+
+  Streaming:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://example.com/rules/streaming.mrs
+    interval: 86400
+
+  # IP 类型规则集
+  PrivateIP:
+    type: http
+    behavior: ipcidr
+    format: mrs
+    url: https://example.com/rules/private-ip.mrs
+    interval: 86400
+
+# ==================== 子规则 ====================
+sub-rules:
+  - name: custom-sub-rules
+    type: http
+    url: https://example.com/rules/sub-rules.yaml
+    interval: 3600
+    behavior: domain
+    format: yaml
+    rules:
+      - DOMAIN-SUFFIX,example.com,DIRECT
+
+# ==================== NTP 配置 ====================
+ntp:
+  enable: false
+  server: time.windows.com
+  port: 123
+  timeout: 30
+  interval: 3600
+
+# ==================== EOF ====================
