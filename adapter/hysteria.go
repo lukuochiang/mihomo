@@ -46,9 +46,9 @@ type HysteriaConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 	ServerAddress string `yaml:"server-address"`
 	ServerPort    int    `yaml:"server-port"`
-	Auth          string `yaml:"auth"` // Password or authentication string
-	Obfs          string `yaml:"obfs"` // Obfuscation password
-	SNI           string `yaml:"sni"`  // TLS Server Name Indication
+	Auth          string `yaml:"auth"`          // Password or authentication string
+	ObfsPassword  string `yaml:"obfs-password"` // Obfuscation password
+	SNI           string `yaml:"sni"`           // TLS Server Name Indication
 	Insecure      bool   `yaml:"insecure"`
 	CA            string `yaml:"ca"`       // Custom CA certificate
 	Protocol      string `yaml:"protocol"` // "hysteria2"
@@ -131,8 +131,8 @@ func (a *HysteriaAdapter) Dial(ctx context.Context, network, address string) (ne
 
 	// Generate obfuscation key if configured
 	var obfsKey []byte
-	if a.config.Obfs != "" {
-		obfsKey = deriveOBFSKey(a.config.Obfs)
+	if a.config.ObfsPassword != "" {
+		obfsKey = deriveOBFSKey(a.config.ObfsPassword)
 	}
 
 	hConn := &HysteriaConn{
@@ -476,7 +476,7 @@ func ParseHysteriaURL(urlStr string) (*HysteriaConfig, error) {
 			case "sni":
 				cfg.SNI = kv[1]
 			case "obfs":
-				cfg.Obfs = kv[1]
+				cfg.ObfsPassword = kv[1]
 			case "insecure":
 				cfg.Insecure = kv[1] == "1" || kv[1] == "true"
 			}

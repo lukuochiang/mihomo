@@ -138,8 +138,9 @@ tun:
   mtu: 1500
   interface-name: tun0
   routing-mark: 6666
-  inet4-address: 172.19.0.1/30
-  inet6-address: ""
+  inet4-address:           # IPv4 地址（数组）
+    - 172.19.0.1/30
+  inet6-address: []       # IPv6 地址（空数组或填入）
   strict-route: true       # 严格路由
   udp-timeout: 300        # UDP 超时 (秒)
   extra-udp: true

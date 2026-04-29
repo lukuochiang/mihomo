@@ -285,7 +285,6 @@ type RawTUNConfig struct {
 	StrictRoute          bool     `yaml:"strict-route"`
 	UDPTunnelTimeout     int      `yaml:"udp-timeout"` // seconds
 	TCPTimeout           int      `yaml:"tcp-timeout"` // seconds
-	UDPTimeout           int      `yaml:"udp-timeout"` // seconds (legacy)
 	BufferSize           int      `yaml:"buffer-size"`
 	ExtraUDP             bool     `yaml:"extra-udp"`
 }
@@ -377,7 +376,7 @@ type RawOutboundConfig struct {
 	// Hysteria/TUIC
 	Auth         string `yaml:"auth"`
 	AuthStr      string `yaml:"auth-str"`
-	Obfs         string `yaml:"obfs"`
+	ObfsPassword string `yaml:"obfs-password"`
 	ProtocolMode string `yaml:"protocol-mode"`
 
 	// WireGuard

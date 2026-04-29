@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lukuochiang/mihomo/config"
+	"github.com/lukuochiang/mihomo/constant"
 	"github.com/lukuochiang/mihomo/control"
 	"github.com/lukuochiang/mihomo/control/api"
 	"github.com/lukuochiang/mihomo/core/dns"
@@ -24,8 +25,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// Deprecated: use constant.Version instead
 var (
 	// Build variables (set via ldflags)
+	// These are kept for backwards compatibility with ldflags injection
 	version = "dev"     // e.g., "alpha", "beta", "v1.0.0"
 	branch  = "smart"   // e.g., "smart", "main"
 	commit  = "none"    // git commit hash
@@ -33,18 +36,17 @@ var (
 )
 
 // getVersionString returns the formatted version string
-// Format: mihomo-{os}-{arch}-{version}-{branch}-{commit}
+// Format: mihomo-{os}-{arch}-{version}
+// Note: constant.Version already contains the full version (e.g., "v0.1.0-alpha-smart-1b882ab4")
 func getVersionString() string {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
-	shortCommit := commit
-	if len(shortCommit) > 7 {
-		shortCommit = shortCommit[:7]
+	// Use constant.Version if set (contains full version info), otherwise use local version
+	ver := version
+	if constant.Version != "dev" && constant.Version != "" {
+		ver = constant.Version
 	}
-	if version == "dev" {
-		return fmt.Sprintf("mihomo-%s-%s-dev-%s-%s", osName, arch, branch, shortCommit)
-	}
-	return fmt.Sprintf("mihomo-%s-%s-%s-%s-%s", osName, arch, version, branch, shortCommit)
+	return fmt.Sprintf("mihomo-%s-%s-%s", osName, arch, ver)
 }
 
 var (
