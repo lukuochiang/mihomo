@@ -7,10 +7,10 @@ BINARY_NAME=mihomo
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
-# Version info from VERSION file (format: VERSION:BRANCH)
+# Version info from VERSION.txt (SemVer format)
 # Can be overridden: make set-version VERSION=v1.0.0
 -include .version.local
-VERSION ?= alpha
+VERSION ?= $(shell cat VERSION.txt 2>/dev/null || echo "v0.0.0")
 BRANCH ?= smart
 
 # ldflags for version info
@@ -30,9 +30,10 @@ CMD_DIR=.
 # Build targets
 all: clean test build
 
-# Set version (usage: make set-version VERSION=v0.1.0-alpha)
+# Set version (usage: make set-version VERSION=v0.1.0)
 set-version:
-	@echo "Setting version to $(VERSION):$(BRANCH)"
+	@echo "Setting version to $(VERSION)"
+	@echo "$(VERSION)" > VERSION.txt
 	@echo 'VERSION=$(VERSION)' > .version.local
 	@echo 'BRANCH=$(BRANCH)' >> .version.local
 	@echo "Done! Run 'make build' to rebuild."

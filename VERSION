@@ -1,8 +1,0 @@
-# mihomo smart Version Configuration
-# SemVer format: MAJOR.MINOR.PATCH
-# Edit this file or use: make set-version VERSION=v0.1.0
-
-# Version phases: alpha, beta, rc (release candidate)
-# Format: VERSION:BRANCH
-
-v0.1.0:smart
