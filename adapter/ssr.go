@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/mihomo/smart/protocol"
+	"github.com/lukuochiang/mihomo/protocol"
 )
 
 // SSRAdapter implements ShadowsocksR outbound adapter

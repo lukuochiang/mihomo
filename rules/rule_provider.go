@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/geoip"
+	"github.com/lukuochiang/mihomo/geoip"
 )
 
 // RuleProviderConfig holds rule provider configuration

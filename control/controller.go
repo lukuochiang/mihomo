@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/mihomo/smart/config"
-	"github.com/mihomo/smart/core/metrics"
-	"github.com/mihomo/smart/core/policy"
-	"github.com/mihomo/smart/core/policy/smart"
+	"github.com/lukuochiang/mihomo/config"
+	"github.com/lukuochiang/mihomo/core/metrics"
+	"github.com/lukuochiang/mihomo/core/policy"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
 
 	"go.uber.org/zap"
 )

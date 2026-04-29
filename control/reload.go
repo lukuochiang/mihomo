@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/mihomo/smart/config"
+	"github.com/lukuochiang/mihomo/config"
 )
 
 // HotReloadConfig holds hot reload configuration

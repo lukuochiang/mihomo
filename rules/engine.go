@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mihomo/smart/geoip"
+	"github.com/lukuochiang/mihomo/geoip"
 )
 
 // RuleType defines rule types

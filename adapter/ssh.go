@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/mihomo/smart/transport"
+	"github.com/lukuochiang/mihomo/transport"
 )
 
 // SSHAdapter implements SSH outbound adapter

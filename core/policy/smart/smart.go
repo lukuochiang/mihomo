@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/core/metrics"
+	"github.com/lukuochiang/mihomo/core/metrics"
 )
 
 // SelectionMode defines the node selection strategy

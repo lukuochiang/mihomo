@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/mihomo/smart/control"
+	"github.com/lukuochiang/mihomo/control"
 
 	"go.uber.org/zap"
 )

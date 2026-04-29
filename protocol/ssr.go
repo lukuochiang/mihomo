@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mihomo/smart/provider"
+	"github.com/lukuochiang/mihomo/provider"
 )
 
 // SSRProtocol defines ShadowsocksR protocol types

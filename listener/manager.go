@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/config"
-	"github.com/mihomo/smart/core/outbound"
-	"github.com/mihomo/smart/core/policy/smart"
+	"github.com/lukuochiang/mihomo/config"
+	"github.com/lukuochiang/mihomo/core/outbound"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
 )
 
 // Manager manages all listeners

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/config"
-	"github.com/mihomo/smart/core/policy/smart"
+	"github.com/lukuochiang/mihomo/config"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
 )
 
 // GroupType defines the type of a group

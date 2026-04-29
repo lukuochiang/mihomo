@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mihomo/smart/core/metrics"
+	"github.com/lukuochiang/mihomo/core/metrics"
 )
 
 // HealthCheck performs health checks on outbound nodes

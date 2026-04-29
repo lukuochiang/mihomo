@@ -13,8 +13,8 @@ BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 VERSION ?= $(shell cat VERSION.txt 2>/dev/null || echo "v0.0.0")
 BRANCH ?= smart
 
-# ldflags for version info
-GO_LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.branch=$(BRANCH) -X main.commit=$(COMMIT) -X main.date=$(BUILD_TIME)"
+# ldflags for version info (strip symbols for production)
+GO_LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.branch=$(BRANCH) -X main.commit=$(COMMIT) -X main.date=$(BUILD_TIME) -s -w"
 
 # Go commands
 GO=go
@@ -41,23 +41,23 @@ set-version:
 build:
 	@echo "Building ${BINARY_NAME}..."
 	@mkdir -p ${BUILD_DIR}
-	CGO_ENABLED=0 ${GOBUILD} ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME} ${CMD_DIR}
+	CGO_ENABLED=0 ${GOBUILD} -trimpath ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME} ${CMD_DIR}
 
 build-linux:
 	@echo "Building ${BINARY_NAME} for Linux..."
 	@mkdir -p ${BUILD_DIR}
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ${GOBUILD} ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}-linux-amd64 ${CMD_DIR}
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ${GOBUILD} -trimpath ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}-linux-amd64 ${CMD_DIR}
 
 build-arm:
 	@echo "Building ${BINARY_NAME} for ARM..."
 	@mkdir -p ${BUILD_DIR}
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 ${GOBUILD} ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}-linux-arm64 ${CMD_DIR}
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 ${GOBUILD} -trimpath ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}-linux-arm64 ${CMD_DIR}
 
 # gvisor build (optional - adds ~10MB to binary size)
 build-gvisor:
 	@echo "Building ${BINARY_NAME} with gvisor support..."
 	@mkdir -p ${BUILD_DIR}
-	CGO_ENABLED=0 ${GOBUILD} -tags with_gvisor ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}-gvisor ${CMD_DIR}
+	CGO_ENABLED=0 ${GOBUILD} -trimpath -tags with_gvisor ${GO_LDFLAGS} -o ${BUILD_DIR}/${BINARY_NAME}-gvisor ${CMD_DIR}
 
 clean:
 	@echo "Cleaning..."
@@ -91,7 +91,7 @@ run:
 
 install:
 	@echo "Installing ${BINARY_NAME}..."
-	${GOBUILD} ${GO_LDFLAGS} -o /usr/local/bin/${BINARY_NAME} ${CMD_DIR}
+	${GOBUILD} -trimpath ${GO_LDFLAGS} -o /usr/local/bin/${BINARY_NAME} ${CMD_DIR}
 
 deps:
 	@echo "Downloading dependencies..."

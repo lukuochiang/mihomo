@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mihomo/smart/protocol"
+	"github.com/lukuochiang/mihomo/protocol"
 )
 
 // Adapter defines the interface for protocol adapters

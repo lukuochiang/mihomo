@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/core/outbound"
-	"github.com/mihomo/smart/core/policy/smart"
+	"github.com/lukuochiang/mihomo/core/outbound"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
 )
 
 // VMessServerConfig holds VMess server configuration

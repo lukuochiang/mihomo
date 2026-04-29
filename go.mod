@@ -1,4 +1,4 @@
-module github.com/mihomo/smart
+module github.com/lukuochiang/mihomo
 
 go 1.23
 

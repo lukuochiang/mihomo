@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/adapter"
-	"github.com/mihomo/smart/core/metrics"
-	"github.com/mihomo/smart/core/policy/smart"
-	"github.com/mihomo/smart/protocol"
-	"github.com/mihomo/smart/transport"
+	"github.com/lukuochiang/mihomo/adapter"
+	"github.com/lukuochiang/mihomo/core/metrics"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
+	"github.com/lukuochiang/mihomo/protocol"
+	"github.com/lukuochiang/mihomo/transport"
 )
 
 // Manager manages outbound nodes

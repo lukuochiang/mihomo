@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/core/outbound"
-	"github.com/mihomo/smart/core/policy/smart"
+	"github.com/lukuochiang/mihomo/core/outbound"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
 )
 
 // SS2022Config holds Shadowsocks 2022 server configuration

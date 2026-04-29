@@ -10,15 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mihomo/smart/config"
-	"github.com/mihomo/smart/control"
-	"github.com/mihomo/smart/control/api"
-	"github.com/mihomo/smart/core/dns"
-	"github.com/mihomo/smart/core/metrics"
-	"github.com/mihomo/smart/core/outbound"
-	"github.com/mihomo/smart/core/policy/smart"
-	"github.com/mihomo/smart/dashboard"
-	"github.com/mihomo/smart/listener"
+	"github.com/lukuochiang/mihomo/config"
+	"github.com/lukuochiang/mihomo/control"
+	"github.com/lukuochiang/mihomo/control/api"
+	"github.com/lukuochiang/mihomo/core/dns"
+	"github.com/lukuochiang/mihomo/core/metrics"
+	"github.com/lukuochiang/mihomo/core/outbound"
+	"github.com/lukuochiang/mihomo/core/policy/smart"
+	"github.com/lukuochiang/mihomo/dashboard"
+	"github.com/lukuochiang/mihomo/listener"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -26,10 +26,10 @@ import (
 
 var (
 	// Build variables (set via ldflags)
-	version  = "dev"      // e.g., "alpha", "beta", "v1.0.0"
-	branch   = "smart"    // e.g., "smart", "main"
-	commit   = "none"     // git commit hash
-	date     = "unknown"  // build date
+	version = "dev"     // e.g., "alpha", "beta", "v1.0.0"
+	branch  = "smart"   // e.g., "smart", "main"
+	commit  = "none"    // git commit hash
+	date    = "unknown" // build date
 )
 
 // getVersionString returns the formatted version string

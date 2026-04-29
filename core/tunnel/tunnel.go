@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mihomo/smart/core/outbound"
+	"github.com/lukuochiang/mihomo/core/outbound"
 )
 
 // Tunnel represents a network tunnel
