@@ -1,10 +1,8 @@
 # mihomo smart Version Configuration
-# Edit this file to set the version, or use: make set-version VERSION=x.y.z
+# SemVer format: MAJOR.MINOR.PATCH
+# Edit this file or use: make set-version VERSION=v0.1.0
 
+# Version phases: alpha, beta, rc (release candidate)
 # Format: VERSION:BRANCH
-# Examples:
-#   alpha:smart     - Alpha release for smart branch
-#   beta:smart       - Beta release for smart branch
-#   v0.1.0-alpha:smart - Semantic version with alpha tag
 
-alpha:smart
+v0.1.0:smart
